@@ -1,0 +1,72 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install buildozer cython
+
+    - name: Set up Java (for SDK)
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'zulu'
+        java-version: '17'
+
+    - name: Set up Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        sdk-version: '34'  # Matches your spec
+
+    - name: Accept Android SDK Licenses
+      run: |
+        # Accept all licenses non-interactively
+        yes | sdkmanager --licenses
+        # Install required components explicitly
+        sdkmanager "build-tools;34.0.0" "platforms;android-34" "platform-tools"
+      env:
+        ANDROID_HOME: $ANDROID_SDK_ROOT
+        ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT
+
+    - name: Cache Buildozer and Android
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.buildozer
+          $ANDROID_SDK_ROOT
+        key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-buildozer-
+
+    - name: Build APK
+      run: |
+        # Set env vars for Buildozer to use the SDK
+        export ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT
+        export ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/25b  # Matches spec
+        buildozer android debug
+      env:
+        ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT
+
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: quotesapp-debug.apk
+        path: bin/quotesapp-0.1-debug.apk
+        retention-days: 30
